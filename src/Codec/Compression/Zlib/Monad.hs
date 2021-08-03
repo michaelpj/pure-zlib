@@ -249,7 +249,7 @@ nextBlock amt =
     | otherwise           = do rest <- getBlock (len - S.length bstr) S.empty
                                return (L.fromStrict bstr `L.append` rest)
 
-nextCode :: Show a => HuffmanTree a -> DeflateM a
+nextCode :: HuffmanTree -> DeflateM Int
 nextCode tree =
   do b <- nextBits 1
      case advanceTree b tree of

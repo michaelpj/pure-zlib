@@ -9,30 +9,28 @@ module Codec.Compression.Zlib.HuffmanTree(
 import Data.Bits(testBit)
 import Data.Word(Word8)
 
-data HuffmanTree a = HuffmanNode (HuffmanTree a) (HuffmanTree a)
-                   | HuffmanValue a
-                   | HuffmanEmpty
+data HuffmanTree = HuffmanNode !HuffmanTree !HuffmanTree
+                 | HuffmanValue Int
+                 | HuffmanEmpty
  deriving (Show)
 
-data AdvanceResult a = AdvanceError String
-                     | NewTree (HuffmanTree a)
-                     | Result a
+data AdvanceResult = AdvanceError String
+                   | NewTree HuffmanTree
+                   | Result Int
 
-emptyHuffmanTree :: HuffmanTree a
+emptyHuffmanTree :: HuffmanTree
 emptyHuffmanTree = HuffmanEmpty
 
-createHuffmanTree :: Show a =>
-                     [(a, Int, Int)] ->
-                     Either String (HuffmanTree a)
+createHuffmanTree :: [(Int, Int, Int)] ->
+                     Either String HuffmanTree
 createHuffmanTree = foldr addHuffmanNode' (Right emptyHuffmanTree)
  where addHuffmanNode' (a, b, c) acc =
          case acc of
            Left err   -> Left err
            Right tree -> addHuffmanNode a b c tree
 
-addHuffmanNode :: Show a =>
-                  a -> Int -> Int -> HuffmanTree a ->
-                  Either String (HuffmanTree a)
+addHuffmanNode :: Int -> Int -> Int -> HuffmanTree->
+                  Either String HuffmanTree
 addHuffmanNode val len code node =
   case node of
     HuffmanEmpty    | len == 0 ->
@@ -60,7 +58,7 @@ addHuffmanNode val len code node =
         Left err -> Left err
         Right l' -> Right (HuffmanNode l' r)
 
-advanceTree :: Word8 -> HuffmanTree a -> AdvanceResult a
+advanceTree :: Word8 -> HuffmanTree -> AdvanceResult
 advanceTree x node =
   case node of
     HuffmanEmpty     -> AdvanceError "Tried to advance empty tree!"

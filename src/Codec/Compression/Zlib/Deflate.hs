@@ -45,7 +45,7 @@ inflate =
          raise (ChecksumError ("checksum mismatch: " ++ showHex theirAdler "" ++
                                " != " ++ showHex ourAdler ""))
 
-inflateBlock :: HuffmanTree Int -> HuffmanTree Int -> DeflateM Bool
+inflateBlock :: HuffmanTree -> HuffmanTree -> DeflateM Bool
 inflateBlock fixedLitTree fixedDistanceTree =
   do bfinal <- (== (1::Word8)) `fmap` nextBits 1
      btype  <- nextBits 2
@@ -82,7 +82,7 @@ inflateBlock fixedLitTree fixedDistanceTree =
        _ -> -- reserved / error
          raise (FormatError ("Unacceptable BTYPE: " ++ show btype))
  where
-  runInflate :: HuffmanTree Int -> HuffmanTree Int -> DeflateM ()
+  runInflate :: HuffmanTree -> HuffmanTree -> DeflateM ()
   runInflate litTree distTree =
     do code <- nextCode litTree
        case compare code 256 of
@@ -97,7 +97,7 @@ inflateBlock fixedLitTree fixedDistanceTree =
 
 -- -----------------------------------------------------------------------------
 
-getCodeLengths :: HuffmanTree Int -> Int -> DeflateM (IntMap Int)
+getCodeLengths :: HuffmanTree -> Int -> DeflateM (IntMap Int)
 getCodeLengths tree !maxl = go 0 0 Map.empty
   where
     go :: Int -> Int -> IntMap Int -> DeflateM (IntMap Int)
@@ -203,19 +203,19 @@ distanceArray = array (0,29) [
 
 -- -----------------------------------------------------------------------------
 
-buildFixedLitTree :: DeflateM (HuffmanTree Int)
+buildFixedLitTree :: DeflateM HuffmanTree
 buildFixedLitTree = computeHuffmanTree
   ([(x, 8) | x <- [0   .. 143]] ++
    [(x, 9) | x <- [144 .. 255]] ++
    [(x, 7) | x <- [256 .. 279]] ++
    [(x, 8) | x <- [280 .. 287]])
 
-buildFixedDistanceTree :: DeflateM (HuffmanTree Int)
+buildFixedDistanceTree :: DeflateM HuffmanTree
 buildFixedDistanceTree = computeHuffmanTree [(x,5) | x <- [0..31]]
 
 -- -----------------------------------------------------------------------------
 
-computeHuffmanTree :: [(Int, Int)] -> DeflateM (HuffmanTree Int)
+computeHuffmanTree :: [(Int, Int)] -> DeflateM HuffmanTree
 computeHuffmanTree initialData =
   case createHuffmanTree (computeCodeValues initialData) of
     Left  err -> raise (HuffmanTreeError err)
