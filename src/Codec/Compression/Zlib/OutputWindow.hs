@@ -19,27 +19,18 @@ import           Data.ByteString.Builder(Builder, toLazyByteString, word8,
 import qualified Data.ByteString      as S
 import qualified Data.ByteString.Lazy as L
 import           Data.FingerTree(FingerTree, Measured, ViewL(..),
-                                 empty, (|>), split, measure, viewl)
-import           Data.Foldable.Compat(foldMap)
+                                  (|>), split, measure, viewl)
 import           Data.Int(Int64)
 import           Data.Semigroup as Sem
 import           Data.Word(Word8)
 import           Prelude()
 import           Prelude.Compat
+import Data.Coerce (coerce)
 
-type WindowType = FingerTree Int S.ByteString
+type WindowType = FingerTree (Sum Int) S.ByteString
 
-instance Sem.Semigroup Int where
-  (<>) = (+)
-
-instance Monoid Int where
-  mempty  = 0
-  {-# INLINE mempty #-}
-  mappend = (+)
-  {-# INLINE mappend #-}
-
-instance Measured Int S.ByteString where
-  measure = S.length
+instance Measured (Sum Int) S.ByteString where
+  measure = Sum . S.length
   {-# INLINE measure #-}
 
 data OutputWindow = OutputWindow {
@@ -48,7 +39,7 @@ data OutputWindow = OutputWindow {
      }
 
 emptyWindow :: OutputWindow
-emptyWindow = OutputWindow empty mempty
+emptyWindow = OutputWindow mempty mempty
 
 emitExcess :: OutputWindow -> Maybe (L.ByteString, OutputWindow)
 emitExcess ow
@@ -77,10 +68,10 @@ addOldChunk :: OutputWindow -> Int -> Int64 -> (OutputWindow, L.ByteString)
 addOldChunk ow dist len = (OutputWindow output (lazyByteString chunk), chunk)
  where
   output      = L.foldlChunks (|>) (owWindow ow) (toLazyByteString (owRecent ow))
-  dropAmt     = measure output - dist
+  dropAmt     = measure output - coerce dist
   (prev, sme) = split (> dropAmt) output
   s :< rest   = viewl sme
-  start       = S.take (fromIntegral len) (S.drop (dropAmt-measure prev) s)
+  start       = S.take (fromIntegral len) (S.drop (coerce (dropAmt-measure prev)) s)
   len'        = fromIntegral len - S.length start
   chunkBase   = getChunk rest len' (byteString start)
   chunkInf    = chunkBase `L.append` chunkInf
