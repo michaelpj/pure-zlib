@@ -53,7 +53,8 @@ fixedHuffmanResults =
 testCases :: [FilePath]
 testCases = [ "randtest1", "randtest2", "randtest3",
               "rfctest1",  "rfctest2",  "rfctest3",
-              "zerotest1", "zerotest2", "zerotest3" ]
+              "zerotest1", "zerotest2", "zerotest3",
+              "tor-list" ]
 
 buildGoldTestCases :: IO TestTree
 buildGoldTestCases =
@@ -75,6 +76,7 @@ toTestCaseName fpath = prefix ++ suffix
   prefix | "zero" `isPrefixOf` fpath = "Zero test #"
          | "rand" `isPrefixOf` fpath = "Random test #"
          | "rfc"  `isPrefixOf` fpath = "RFC test #"
+         | "tor"  `isPrefixOf` fpath = "Tor test #"
          | otherwise                 = error "Bad test case prefix."
   suffix = [last fpath]
 
