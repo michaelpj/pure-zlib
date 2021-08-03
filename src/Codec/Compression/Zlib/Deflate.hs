@@ -68,7 +68,7 @@ inflateBlock fixedLitTree fixedDistanceTree =
             codeLens <- replicateM hclen (nextBits 3)
             let codeLens' = zip codeLengthOrder codeLens
             codeTree <- computeHuffmanTree codeLens'
-            lens <- getCodeLengths codeTree 0 (hlit + hdist) 0 Map.empty
+            lens <- getCodeLengths codeTree (hlit + hdist) 
             -- We do this as a big chunk and then split it up because the spec
             -- allows repeat codes to cross the hlit / hdist boundary. So now we
             -- need to pull off the hdist items.
@@ -97,32 +97,32 @@ inflateBlock fixedLitTree fixedDistanceTree =
 
 -- -----------------------------------------------------------------------------
 
-getCodeLengths :: HuffmanTree Int ->
-                  Int -> Int -> Int ->
-                  IntMap Int ->
-                  DeflateM (IntMap Int)
-getCodeLengths tree n maxl prev acc
-  | n >= maxl   = return acc
-  | otherwise =
-    do code <- nextCode tree
-       if | code <= 15 ->
-                getCodeLengths tree (n+1) maxl code (Map.insert n code acc)
-          | code == 16 -> -- copy the previous code length 3 - 6 times
-             do num <- (3+) `fmap` nextBits 2
-                getCodeLengths tree (n+num) maxl prev (addNTimes n num prev acc)
-          | code == 17 -> -- repeat a code length of 0 for 3 - 10 times
-             do num <- (3+) `fmap` nextBits 3
-                getCodeLengths tree (n+num) maxl 0    (addNTimes n num 0 acc)
-          | code == 18 -> -- repeat a code length of 0 for 11 - 138 times
-             do num <- (11+) `fmap` nextBits 7
-                getCodeLengths tree (n+num) maxl 0    (addNTimes n num 0 acc)
-          | otherwise ->
-             raise (DecompressionError ("Unexpected code: " ++ show code))
- where
-  addNTimes idx count val old =
-    let idxs = take count [idx..]
-        vals = replicate count val
-    in Map.union old (Map.fromList (zip idxs vals))
+getCodeLengths :: HuffmanTree Int -> Int -> DeflateM (IntMap Int)
+getCodeLengths tree !maxl = go 0 0 Map.empty
+  where
+    go :: Int -> Int -> IntMap Int -> DeflateM (IntMap Int)
+    go !n !prev acc
+      | n >= maxl   = return acc
+      | otherwise   = do
+          code <- nextCode tree
+          if | code <= 15 ->
+                    go (n+1) code (Map.insert n code acc)
+              | code == 16 -> -- copy the previous code length 3 - 6 times
+                do num <- (3+) `fmap` nextBits 2
+                   go (n+num) prev (addNTimes n num prev acc)
+              | code == 17 -> -- repeat a code length of 0 for 3 - 10 times
+                do num <- (3+) `fmap` nextBits 3
+                   go (n+num) 0 (addNTimes n num 0 acc)
+              | code == 18 -> -- repeat a code length of 0 for 11 - 138 times
+                do num <- (11+) `fmap` nextBits 7
+                   go (n+num) 0 (addNTimes n num 0 acc)
+              | otherwise ->
+                raise (DecompressionError ("Unexpected code: " ++ show code))
+    addNTimes :: Int -> Int -> Int -> IntMap Int -> IntMap Int
+    addNTimes !idx !count !val old =
+      let idxs = take count [idx..]
+          vals = replicate count val
+      in Map.union old (Map.fromList (zip idxs vals))
 
 -- -----------------------------------------------------------------------------
 
