@@ -167,7 +167,7 @@ getNextChunk = DeflateM $ \ st k -> NeedMore (loadChunk st k)
 {-# SPECIALIZE nextBits :: Int -> DeflateM Int64 #-}
 {-# INLINE nextBits #-}
 nextBits :: (Num a, Bits a) => Int -> DeflateM a
-nextBits x = nextBits' x 0 0
+nextBits !x = nextBits' x 0 0
 
 {-# SPECIALIZE nextBits' :: Int -> Int -> Word8 -> DeflateM Word8 #-}
 {-# SPECIALIZE nextBits' :: Int -> Int -> Int   -> DeflateM Int   #-}
@@ -264,20 +264,20 @@ advanceToByte =
      set dcs{ dcsNextBitNo = 8 }
 
 emitByte :: Word8 -> DeflateM ()
-emitByte b =
+emitByte !b =
   do dcs <- get
      set dcs{ dcsOutput  = dcsOutput dcs `addByte` b
             , dcsAdler32 = advanceAdler (dcsAdler32 dcs) b }
 {-# INLINE emitByte #-}
 
 emitBlock :: L.ByteString -> DeflateM ()
-emitBlock b =
+emitBlock !b =
   do dcs <- get
      set dcs { dcsOutput  = dcsOutput dcs `addChunk` b
              , dcsAdler32 = L.foldl advanceAdler (dcsAdler32 dcs) b }
 
 emitPastChunk :: Int -> Int64 -> DeflateM ()
-emitPastChunk dist len =
+emitPastChunk !dist !len =
   do dcs <- get
      let (output', newChunk) = addOldChunk (dcsOutput dcs) dist len
      set dcs { dcsOutput = output'
@@ -304,4 +304,4 @@ finalize =
 
 {-# INLINE publishLazy #-}
 publishLazy :: L.ByteString -> DeflateM ()
-publishLazy lbstr = DeflateM (\ st k -> Chunk lbstr (k st ()))
+publishLazy !lbstr = DeflateM (\ st k -> Chunk lbstr (k st ()))
