@@ -25,26 +25,26 @@ import           Data.Word(Word8)
 import           Numeric(showHex)
 
 inflate :: DeflateM ()
-inflate =
-  do fixedLit  <- buildFixedLitTree
-     fixedDist <- buildFixedDistanceTree
-     go fixedLit fixedDist
- where
-  go fixedLit fixedDist =
-    do isFinal <- inflateBlock fixedLit fixedDist
-       moveWindow
-       if isFinal
-          then checkChecksum >> finalize
-          else go fixedLit fixedDist
-  --
-  checkChecksum =
-    do advanceToByte
-       ourAdler   <- finalAdler
-       theirAdler <- nextWord32
-       unless (theirAdler == ourAdler) $
-         raise (ChecksumError ("checksum mismatch: " ++ showHex theirAdler "" ++
-                               " != " ++ showHex ourAdler ""))
+inflate = do
+  fixedLit  <- buildFixedLitTree
+  fixedDist <- buildFixedDistanceTree
+  let go = do
+        isFinal <- inflateBlock fixedLit fixedDist
+        moveWindow
+        if isFinal
+            then checkChecksum >> finalize
+            else go
+  go
+  where
+    checkChecksum = do
+      advanceToByte
+      ourAdler   <- finalAdler
+      theirAdler <- nextWord32
+      unless (theirAdler == ourAdler) $
+        raise (ChecksumError ("checksum mismatch: " ++ showHex theirAdler "" ++
+                              " != " ++ showHex ourAdler ""))
 
+{-# SCC inflateBlock #-}
 inflateBlock :: HuffmanTree -> HuffmanTree -> DeflateM Bool
 inflateBlock fixedLitTree fixedDistanceTree =
   do bfinal <- (== (1::Word8)) `fmap` nextBits 1
