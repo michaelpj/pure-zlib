@@ -37,7 +37,6 @@ import           Codec.Compression.Zlib.OutputWindow(OutputWindow, emptyWindow,
                                                      addChunk, addOldChunk,
                                                      finalizeWindow)
 import           Control.Exception(Exception)
-import           Control.Monad(Monad)
 import           Data.Bits(Bits(..))
 import qualified Data.ByteString      as S
 import qualified Data.ByteString.Lazy as L
