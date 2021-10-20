@@ -6,7 +6,8 @@ import qualified Data.ByteString      as S
 import qualified Data.ByteString.Lazy as L
 import Prelude hiding (readFile, writeFile)
 import Criterion.Main
-import Control.Monad.ST.Lazy
+import qualified Control.Monad.ST.Lazy as LST
+import qualified Control.Monad.ST as ST
 
 testCases :: [String]
 testCases = [ "randtest1", "randtest2", "randtest3",
@@ -39,22 +40,28 @@ main = defaultMain
       pure (zbstr, goldbstr)
 
 decompressIncrementalPure :: L.ByteString -> L.ByteString
-decompressIncrementalPure input = go PureZlib.decompressIncremental (L.toChunks input) []
+decompressIncrementalPure input = ST.runST $ do
+  decoder <- PureZlib.decompressIncremental
+  go decoder (L.toChunks input) []
   where
     go decoder ls chunks =
       case decoder of
         PureZlib.NeedMore f
-          | (x:rest) <- ls -> go (f x) rest chunks
+          | (x:rest) <- ls -> do
+              next <- f x
+              go next rest chunks
           | otherwise      -> error "ERROR: Ran out of data mid-decompression."
-        PureZlib.Chunk c m -> go m ls (L.toStrict c:chunks)
+        PureZlib.Chunk c m -> do
+          next <- m
+          go next ls (c:chunks)
         PureZlib.Done | not (null ls) -> error "ERROR: Finished decompression with data left."
-        PureZlib.Done | otherwise -> L.fromChunks $ reverse chunks
+        PureZlib.Done | otherwise -> pure $ L.fromChunks $ reverse chunks
         PureZlib.DecompError e -> error ("ERROR: " ++ show e)
 
 decompressIncrementalC :: L.ByteString -> L.ByteString
-decompressIncrementalC input = runST $ go (CZlibIncremental.decompressST CZlibIncremental.zlibFormat CZlibIncremental.defaultDecompressParams) (L.toChunks input) []
+decompressIncrementalC input = LST.runST $ go (CZlibIncremental.decompressST CZlibIncremental.zlibFormat CZlibIncremental.defaultDecompressParams) (L.toChunks input) []
   where
-    go :: CZlibIncremental.DecompressStream (ST s) -> [S.ByteString] -> [S.ByteString] -> ST s L.ByteString
+    go :: CZlibIncremental.DecompressStream (LST.ST s) -> [S.ByteString] -> [S.ByteString] -> LST.ST s L.ByteString
     go decoder ls chunks = case decoder of
       CZlibIncremental.DecompressInputRequired f
         | (x:rest) <- ls -> do

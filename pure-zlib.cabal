@@ -35,8 +35,6 @@ library
                       Codec.Compression.Zlib.HuffmanTree,
                       Codec.Compression.Zlib.Monad,
                       Codec.Compression.Zlib.OutputWindow
-  other-modules:
-                      Codec.Compression.Zlib.FingerTree
   default-extensions:
                       BangPatterns,
                       DeriveDataTypeable,
