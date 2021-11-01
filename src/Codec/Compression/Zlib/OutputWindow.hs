@@ -22,7 +22,8 @@ import qualified Data.Vector.Storable as V
 import qualified Data.Vector.Storable.Mutable as MV
 import Data.Vector.Storable.ByteString
 import GHC.ST (ST (..))
-import GHC.Word (Word8 (..))
+import Foreign
+import Control.Monad.ST.Unsafe
 
 windowSize :: Int
 windowSize = 128 * 1024
@@ -49,13 +50,13 @@ emitExcess OutputWindow{owWindow = window, owNext = initialOffset}
     -- Need move as these can overlap!
     MV.move (MV.slice 0 excessLength window) (MV.slice excessChunkSize excessLength window)
     let ow' = OutputWindow window excessLength
-    return (Just (toByteString toEmit, ow'))
+    return (Just (vectorToByteString toEmit, ow'))
 
 finalizeWindow :: OutputWindow s -> ST s S.ByteString
 finalizeWindow ow = do
   -- safe as we're doing it at the end
   res <- V.unsafeFreeze (MV.slice 0 (owNext ow) (owWindow ow))
-  pure $ toByteString res
+  pure $ vectorToByteString res
 
 -- -----------------------------------------------------------------------------
 
@@ -71,35 +72,27 @@ addChunk !ow !bs = foldM copyChunk ow (L.toChunks bs)
 copyChunk :: OutputWindow s -> S.ByteString -> ST s (OutputWindow s)
 copyChunk ow sbstr = do
   -- safe as we're never going to look at this again
-  ba <- V.unsafeThaw $ fromByteString sbstr
-  let offset = owNext ow
-      len = MV.length ba
-  MV.copy (MV.slice offset len (owWindow ow)) ba
+  let ba = byteStringToVector sbstr
+      offset = owNext ow
+      len = V.length ba
+  V.copy (MV.slice offset len (owWindow ow)) ba
   return ow{owNext = offset + len}
 
 addOldChunk :: OutputWindow s -> Int -> Int -> ST s (OutputWindow s, S.ByteString)
 addOldChunk (OutputWindow window next) dist len = do
   -- zlib can ask us to copy an "old" chunk that extends past our current offset.
   -- The intention is that we then start copying the "new" data we just copied into
-  -- place. 'copyChunked' handles this for us.
-  copyChunked (MV.slice next len window) (MV.slice (next - dist) len window) dist
+  -- place. This is handled by 'evilCopy'
+  evilCopy (MV.slice next len window) (MV.slice (next - dist) len window) len
   result <- V.freeze $ MV.slice next len window
-  return (OutputWindow window (next + len), toByteString result)
+  return (OutputWindow window (next + len), vectorToByteString result)
 
-{- | A copy function that copies the buffers sequentially in chunks no larger than
- the stated size. This allows us to handle the insane zlib behaviour.
--}
-copyChunked :: MV.MVector s Word8 -> MV.MVector s Word8 -> Int -> ST s ()
-copyChunked dest src chunkSize = go 0 (MV.length src)
- where
-  go _ 0 = pure ()
-  go copied toCopy = do
-    let thisChunkSize = min toCopy chunkSize
-    MV.copy (MV.slice copied thisChunkSize dest) (MV.slice copied thisChunkSize src)
-    go (copied + thisChunkSize) (toCopy - thisChunkSize)
-
-fromByteString :: S.ByteString -> V.Vector Word8
-fromByteString = byteStringToVector
-
-toByteString :: V.Vector Word8 -> S.ByteString
-toByteString = vectorToByteString
+evilCopy :: MV.MVector s Word8 -> MV.MVector s Word8 -> Int -> ST s ()
+evilCopy (MV.MVector _ dest) (MV.MVector _ src) len = unsafeIOToST $ withForeignPtr dest $ \dp -> withForeignPtr src $ \sp -> go dp sp len
+  where
+    sz = sizeOf (undefined :: Word8)
+    go :: Ptr Word8 -> Ptr Word8 -> Int -> IO ()
+    go _ _ 0 = pure ()
+    go dp sp toCopy = do
+      poke dp =<< peek sp
+      go (dp `plusPtr` sz) (sp `plusPtr` sz) (toCopy-1)
